@@ -95,7 +95,10 @@ def build_prompt(novel_dir: str, episode_file: str, other_reviews: dict = None) 
 
 
 def get_system_prompt() -> str:
-    """GEMINI.md를 시스템 프롬프트로 읽는다."""
+    """GEMINI.md를 시스템 프롬프트로 읽는다. MCP 서버 번들 우선, fallback으로 NOVEL_ROOT."""
+    bundled = os.path.join(os.path.dirname(__file__), "GEMINI.md")
+    if os.path.isfile(bundled):
+        return safe_read(bundled)
     return safe_read(os.path.join(NOVEL_ROOT, "GEMINI.md"))
 
 
@@ -166,7 +169,8 @@ async def call_ollama(prompt: str, system: str, model: str) -> str:
 async def call_gemini(novel_dir: str, episode_file: str, other_reviews: dict = None) -> str:
     """Gemini CLI로 리뷰를 받는다 (파일시스템 접근)."""
     ep_path = episode_file
-    prompt = f"/root/novel/GEMINI.md에 따라 {ep_path}를 리뷰해. 설정 파일(settings/), 요약(summaries/), 이전 피드백 로그(summaries/editor-feedback-log.md)를 참고해서 EDITOR_FEEDBACK_gemini.md에 결과를 작성해."
+    gemini_md = os.path.join(os.path.dirname(__file__), "GEMINI.md")
+    prompt = f"{gemini_md}에 따라 {ep_path}를 리뷰해. 설정 파일(settings/), 요약(summaries/), 이전 피드백 로그(summaries/editor-feedback-log.md)를 참고해서 EDITOR_FEEDBACK_gemini.md에 결과를 작성해."
 
     if other_reviews:
         refs = []
