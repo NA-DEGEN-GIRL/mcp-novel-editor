@@ -32,6 +32,11 @@ Before reviewing any episode, you MUST read these files in the novel's folder:
 - **[CRITICAL] Emotional Conjunctions**: Distinguish between logical (그러나, 하지만) and emotional (그래도, 그런데도) connectives. Using a logical connective in an emotional moment flattens the prose.
 - **Verb Weight**: Eliminate "flat" or "dry" verbs in emotional peaks. Suggest vivid alternatives.
 - **Grammar & Precision**: Fix precise linguistic errors (e.g., "서른 분" → "삼십 분").
+- **[IMPORTANT] Counter Word Numeral System**: Korean counters require specific numeral types. AI frequently mixes them up:
+  - 배(倍), 개, 명, 번, 잔, 마리 → **고유어 수사**: 두 배, 세 배, 네 배 (NOT 이 배, 삼 배, 사 배)
+  - 분(分), 초(秒), 원(圓), 킬로 → **한자어 수사**: 삼십 분, 삼천 원 (NOT 서른 분)
+  - 시(時), 살 → **고유어 수사**: 세 시, 스무 살 (NOT 삼 시, 이십 살)
+- **[IMPORTANT] 할푼리(割分厘) Unit Completeness**: When expressing ratios with 할/푼/리, each sub-unit digit MUST have its unit name. "오 할 이" is WRONG — must be "오 할 이 푼". "오 할" alone is fine (integer 할 only). Flag any "X 할 Y" where Y lacks a unit suffix (푼 or 리).
 
 ### 1.2 AI Habit Detection
 
