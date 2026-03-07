@@ -330,23 +330,13 @@ async def review_episode(
         for (source_name, _), result in zip(phase2_tasks, gathered):
             if isinstance(result, Exception):
                 errors[source_name] = str(result)
-                # Gemini 실패 시 NIM fallback
-                if source_name == "gemini" and "nim" not in results:
-                    try:
-                        prompt = build_prompt(novel_dir, episode_file, results)
-                        fallback = await call_nim(prompt, system, "mistralai/mistral-large-3-675b-instruct-2512")
-                        results["gemini_fallback"] = fallback
-                        save_feedback(novel_dir, "gemini", fallback, episode_file)
-                        errors["gemini"] += " → NIM fallback 성공"
-                    except Exception as fe:
-                        errors["gemini_fallback"] = str(fe)
             else:
                 results[source_name] = result
                 save_feedback(novel_dir, source_name, result, episode_file)
 
     # 결과 요약
     lines = [f"## 편집 리뷰 결과: {ep_name}\n"]
-    for src in ["nim", "ollama", "gemini", "gemini_fallback", "gpt"]:
+    for src in ["nim", "ollama", "gemini", "gpt"]:
         if src in results:
             preview = results[src][:500].replace("\n", " ")
             path = os.path.join(novel_dir, f"EDITOR_FEEDBACK_{src.split('_')[0]}.md")
