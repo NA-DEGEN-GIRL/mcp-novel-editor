@@ -11,7 +11,6 @@ import asyncio
 import json
 import os
 import re
-import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -23,7 +22,6 @@ mcp = FastMCP("novel-editor")
 NOVEL_ROOT = os.getenv("NOVEL_ROOT", "/root/novel")
 NIM_PROXY_URL = os.getenv("NIM_PROXY_URL", "http://localhost:8082")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_PATH = os.getenv("OLLAMA_PATH", "/usr/local/bin/ollama")
 NIM_TIMEOUT = int(os.getenv("NIM_TIMEOUT", "600"))
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "900"))
 GEMINI_TIMEOUT = int(os.getenv("GEMINI_TIMEOUT", "600"))
@@ -104,10 +102,12 @@ def get_system_prompt() -> str:
     return safe_read(os.path.join(NOVEL_ROOT, "GEMINI.md"))
 
 
-def save_feedback(novel_dir: str, source: str, content: str, episode_file: str):
+def save_feedback(novel_dir: str, source: str, content: str, episode_file: str, skip_if_exists: bool = False):
     """EDITOR_FEEDBACK_{source}.md에 피드백을 저장한다."""
     filename = f"EDITOR_FEEDBACK_{source}.md"
     filepath = os.path.join(novel_dir, filename)
+    if skip_if_exists and os.path.exists(filepath):
+        return filepath
     ep_name = os.path.basename(episode_file)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     header = f"<!-- source: {source} | file: {ep_name} | date: {timestamp} -->\n\n"
@@ -185,13 +185,16 @@ async def call_gemini(novel_dir: str, episode_file: str, other_reviews: dict = N
             prompt += f"\n\n추가 참고 자료: 아래 다른 AI 모델의 리뷰 결과도 참고하되, 맹신하지 말고 네 독자적 판단으로 리뷰해.\n" + "\n".join(refs)
 
     proc = await asyncio.create_subprocess_exec(
-        "gemini", "-m", "gemini-3.1-pro-preview", "-p", prompt, "-y",
+        "gemini", "-m", "gemini-3.1-pro-preview", "-p", "-", "-y",
         cwd=novel_dir,
+        stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=GEMINI_TIMEOUT)
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(prompt.encode()), timeout=GEMINI_TIMEOUT
+        )
     except asyncio.TimeoutError:
         proc.kill()
         await proc.wait()
@@ -301,11 +304,11 @@ async def review_episode(
 
     # Phase 1: NIM + Ollama 병렬
     nim_ollama_tasks = []
-    if "nim" in active:
+    if "nim" in active or "ollama" in active:
         prompt = build_prompt(novel_dir, episode_file)
+    if "nim" in active:
         nim_ollama_tasks.append(("nim", call_nim(prompt, system, flags["nim_feedback_model"])))
     if "ollama" in active:
-        prompt = build_prompt(novel_dir, episode_file)
         nim_ollama_tasks.append(("ollama", call_ollama(prompt, system, flags["ollama_feedback_model"])))
 
     if nim_ollama_tasks:
@@ -337,7 +340,7 @@ async def review_episode(
                 errors[source_name] = str(result)
             else:
                 results[source_name] = result
-                save_feedback(novel_dir, source_name, result, episode_file)
+                save_feedback(novel_dir, source_name, result, episode_file, skip_if_exists=True)
 
     # 결과 요약
     lines = [f"## 편집 리뷰 결과: {ep_name}\n"]
@@ -409,7 +412,10 @@ async def check_status() -> str:
         )
         stdout, _ = await proc.communicate()
         path = stdout.decode().strip()
-        rows.append(f"| Gemini CLI | ✅ 설치됨 | `{path}` |")
+        if proc.returncode == 0 and path:
+            rows.append(f"| Gemini CLI | ✅ 설치됨 | `{path}` |")
+        else:
+            rows.append("| Gemini CLI | ❌ 미설치 | `npm install -g @google/gemini-cli` |")
     except Exception:
         rows.append("| Gemini CLI | ❌ 미설치 | `npm install -g @google/gemini-cli` |")
 
@@ -421,7 +427,10 @@ async def check_status() -> str:
         )
         stdout, _ = await proc.communicate()
         path = stdout.decode().strip()
-        rows.append(f"| Codex CLI (GPT) | ✅ 설치됨 | `{path}` |")
+        if proc.returncode == 0 and path:
+            rows.append(f"| Codex CLI (GPT) | ✅ 설치됨 | `{path}` |")
+        else:
+            rows.append("| Codex CLI (GPT) | ❌ 미설치 | `npm install -g @openai/codex` |")
     except Exception:
         rows.append("| Codex CLI (GPT) | ❌ 미설치 | `npm install -g @openai/codex` |")
 
