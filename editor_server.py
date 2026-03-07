@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 소설 편집 리뷰 MCP Server
-- 외부 AI(Gemini CLI, NIM Proxy, Ollama)를 호출하여 에피소드 편집 리뷰를 수행
+- 외부 AI(Gemini CLI, Codex CLI, NIM Proxy, Ollama)를 호출하여 에피소드 편집 리뷰를 수행
 - review_episode: 단건 리뷰
 - batch_review: 일괄 리뷰 (정기 점검 P7용)
 - check_status: 외부 AI 서비스 상태 확인
@@ -27,6 +27,7 @@ OLLAMA_PATH = os.getenv("OLLAMA_PATH", "/usr/local/bin/ollama")
 NIM_TIMEOUT = int(os.getenv("NIM_TIMEOUT", "600"))
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "900"))
 GEMINI_TIMEOUT = int(os.getenv("GEMINI_TIMEOUT", "600"))
+CODEX_TIMEOUT = int(os.getenv("CODEX_TIMEOUT", "600"))
 
 
 # ─── Helpers ────────────────────────────────────────────────
@@ -51,6 +52,7 @@ def parse_claude_md(novel_dir: str) -> dict:
         "nim_feedback_model": "mistralai/mistral-large-3-675b-instruct-2512",
         "ollama_feedback": False,
         "ollama_feedback_model": "gpt-oss:120b",
+        "gpt_feedback": True,
         "illustration": False,
     }
     for key in flags:
@@ -170,7 +172,8 @@ async def call_gemini(novel_dir: str, episode_file: str, other_reviews: dict = N
     """Gemini CLI로 리뷰를 받는다 (파일시스템 접근)."""
     ep_path = episode_file
     gemini_md = os.path.join(os.path.dirname(__file__), "GEMINI.md")
-    prompt = f"{gemini_md}에 따라 {ep_path}를 리뷰해. 설정 파일(settings/), 요약(summaries/), 이전 피드백 로그(summaries/editor-feedback-log.md)를 참고해서 EDITOR_FEEDBACK_gemini.md에 결과를 작성해."
+    today = datetime.now().strftime("%Y-%m-%d %H:%M")
+    prompt = f"오늘 날짜는 {today}이다. {gemini_md}에 따라 {ep_path}를 리뷰해. 설정 파일(settings/), 요약(summaries/), 이전 피드백 로그(summaries/editor-feedback-log.md)를 참고해서 EDITOR_FEEDBACK_gemini.md에 결과를 작성해."
 
     if other_reviews:
         refs = []
@@ -206,6 +209,46 @@ async def call_gemini(novel_dir: str, episode_file: str, other_reviews: dict = N
     raise RuntimeError(f"Gemini 리뷰 실패: {stderr.decode('utf-8', errors='replace')[:300]}")
 
 
+async def call_codex(novel_dir: str, episode_file: str, other_reviews: dict = None) -> str:
+    """Codex CLI (GPT)로 리뷰를 받는다 (파일시스템 접근)."""
+    ep_path = episode_file
+    gpt_md = os.path.join(os.path.dirname(__file__), "GPT.md")
+    today = datetime.now().strftime("%Y-%m-%d %H:%M")
+    prompt = f"오늘 날짜는 {today}이다. {gpt_md}에 따라 {ep_path}를 리뷰해. 설정 파일(settings/), 요약(summaries/), 이전 피드백 로그(summaries/editor-feedback-log.md)를 참고해서 EDITOR_FEEDBACK_gpt.md에 결과를 작성해."
+
+    if other_reviews:
+        refs = []
+        for source, content in other_reviews.items():
+            if content:
+                truncated = content[:2000] if len(content) > 2000 else content
+                refs.append(f"[{source} 리뷰]\n{truncated}")
+        if refs:
+            prompt += f"\n\n추가 참고 자료: 아래 다른 AI 모델의 리뷰 결과도 참고하되, 맹신하지 말고 네 독자적 판단으로 리뷰해.\n" + "\n".join(refs)
+
+    proc = await asyncio.create_subprocess_exec(
+        "codex", "exec", prompt, "--full-auto", "-C", novel_dir,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=CODEX_TIMEOUT)
+    except asyncio.TimeoutError:
+        proc.kill()
+        raise RuntimeError("Codex CLI 시간 초과")
+
+    # Codex가 직접 파일에 썼는지 확인
+    feedback_path = os.path.join(novel_dir, "EDITOR_FEEDBACK_gpt.md")
+    if os.path.exists(feedback_path):
+        return safe_read(feedback_path)
+
+    # stdout에 출력한 경우
+    output = stdout.decode("utf-8", errors="replace").strip()
+    if output:
+        return output
+
+    raise RuntimeError(f"Codex 리뷰 실패: {stderr.decode('utf-8', errors='replace')[:300]}")
+
+
 # ─── MCP Tools ──────────────────────────────────────────────
 
 @mcp.tool()
@@ -216,13 +259,13 @@ async def review_episode(
 ) -> str:
     """에피소드 편집 리뷰를 외부 AI에 요청합니다.
 
-    NIM Proxy, Ollama, Gemini CLI를 호출하여 EDITOR_FEEDBACK_*.md를 생성합니다.
+    NIM Proxy, Ollama, Gemini CLI, Codex CLI(GPT)를 호출하여 EDITOR_FEEDBACK_*.md를 생성합니다.
     각 소스의 활성화 여부는 CLAUDE.md의 플래그를 따르거나 sources 파라미터로 직접 지정할 수 있습니다.
 
     Args:
         episode_file: 에피소드 파일 절대 경로
         novel_dir: 소설 폴더 절대 경로
-        sources: "auto" (CLAUDE.md 플래그 따름), "gemini", "nim", "ollama", "all", 또는 쉼표 구분 조합
+        sources: "auto" (CLAUDE.md 플래그 따름), "gemini", "gpt", "nim", "ollama", "all", 또는 쉼표 구분 조합
     """
     if not os.path.isfile(episode_file):
         return f"❌ 에피소드 파일이 없습니다: {episode_file}"
@@ -241,8 +284,10 @@ async def review_episode(
         if flags["ollama_feedback"]:
             active.add("ollama")
         active.add("gemini")
+        if flags["gpt_feedback"]:
+            active.add("gpt")
     elif sources == "all":
-        active = {"nim", "ollama", "gemini"}
+        active = {"nim", "ollama", "gemini", "gpt"}
     else:
         active = {s.strip() for s in sources.split(",")}
 
@@ -270,28 +315,38 @@ async def review_episode(
                 results[source_name] = result
                 save_feedback(novel_dir, source_name, result, episode_file)
 
-    # Phase 2: Gemini (NIM/Ollama 결과를 참고)
+    # Phase 2: Gemini + Codex 병렬 (NIM/Ollama 결과를 참고)
+    phase2_tasks = []
     if "gemini" in active:
-        try:
-            gemini_result = await call_gemini(novel_dir, episode_file, results)
-            results["gemini"] = gemini_result
-            save_feedback(novel_dir, "gemini", gemini_result, episode_file)
-        except Exception as e:
-            errors["gemini"] = str(e)
-            # Gemini 실패 시 NIM fallback
-            if "nim" not in results:
-                try:
-                    prompt = build_prompt(novel_dir, episode_file, results)
-                    fallback = await call_nim(prompt, system, "mistralai/mistral-large-3-675b-instruct-2512")
-                    results["gemini_fallback"] = fallback
-                    save_feedback(novel_dir, "gemini", fallback, episode_file)
-                    errors["gemini"] += " → NIM fallback 성공"
-                except Exception as fe:
-                    errors["gemini_fallback"] = str(fe)
+        phase2_tasks.append(("gemini", call_gemini(novel_dir, episode_file, results)))
+    if "gpt" in active:
+        phase2_tasks.append(("gpt", call_codex(novel_dir, episode_file, results)))
+
+    if phase2_tasks:
+        gathered = await asyncio.gather(
+            *[task for _, task in phase2_tasks],
+            return_exceptions=True,
+        )
+        for (source_name, _), result in zip(phase2_tasks, gathered):
+            if isinstance(result, Exception):
+                errors[source_name] = str(result)
+                # Gemini 실패 시 NIM fallback
+                if source_name == "gemini" and "nim" not in results:
+                    try:
+                        prompt = build_prompt(novel_dir, episode_file, results)
+                        fallback = await call_nim(prompt, system, "mistralai/mistral-large-3-675b-instruct-2512")
+                        results["gemini_fallback"] = fallback
+                        save_feedback(novel_dir, "gemini", fallback, episode_file)
+                        errors["gemini"] += " → NIM fallback 성공"
+                    except Exception as fe:
+                        errors["gemini_fallback"] = str(fe)
+            else:
+                results[source_name] = result
+                save_feedback(novel_dir, source_name, result, episode_file)
 
     # 결과 요약
     lines = [f"## 편집 리뷰 결과: {ep_name}\n"]
-    for src in ["nim", "ollama", "gemini", "gemini_fallback"]:
+    for src in ["nim", "ollama", "gemini", "gemini_fallback", "gpt"]:
         if src in results:
             preview = results[src][:500].replace("\n", " ")
             path = os.path.join(novel_dir, f"EDITOR_FEEDBACK_{src.split('_')[0]}.md")
@@ -362,6 +417,18 @@ async def check_status() -> str:
         rows.append(f"| Gemini CLI | ✅ 설치됨 | `{path}` |")
     except Exception:
         rows.append("| Gemini CLI | ❌ 미설치 | `npm install -g @google/gemini-cli` |")
+
+    # Codex CLI
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "which", "codex",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await proc.communicate()
+        path = stdout.decode().strip()
+        rows.append(f"| Codex CLI (GPT) | ✅ 설치됨 | `{path}` |")
+    except Exception:
+        rows.append("| Codex CLI (GPT) | ❌ 미설치 | `npm install -g @openai/codex` |")
 
     # NIM Proxy
     try:
