@@ -185,7 +185,7 @@ async def call_gemini(novel_dir: str, episode_file: str, other_reviews: dict = N
             prompt += f"\n\n추가 참고 자료: 아래 다른 AI 모델의 리뷰 결과도 참고하되, 맹신하지 말고 네 독자적 판단으로 리뷰해.\n" + "\n".join(refs)
 
     proc = await asyncio.create_subprocess_exec(
-        "gemini", "-p", prompt, "-y",
+        "gemini", "-m", "gemini-3.1-pro-preview", "-p", prompt, "-y",
         cwd=novel_dir,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -194,6 +194,7 @@ async def call_gemini(novel_dir: str, episode_file: str, other_reviews: dict = N
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=GEMINI_TIMEOUT)
     except asyncio.TimeoutError:
         proc.kill()
+        await proc.wait()
         raise RuntimeError("Gemini CLI 시간 초과")
 
     # Gemini가 직접 파일에 썼는지 확인
@@ -226,14 +227,18 @@ async def call_codex(novel_dir: str, episode_file: str, other_reviews: dict = No
             prompt += f"\n\n추가 참고 자료: 아래 다른 AI 모델의 리뷰 결과도 참고하되, 맹신하지 말고 네 독자적 판단으로 리뷰해.\n" + "\n".join(refs)
 
     proc = await asyncio.create_subprocess_exec(
-        "codex", "exec", prompt, "--full-auto", "-m", "gpt-5.4", "-C", novel_dir,
+        "codex", "exec", "-", "--full-auto", "-m", "gpt-5.4", "-C", novel_dir,
+        stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=CODEX_TIMEOUT)
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(prompt.encode()), timeout=CODEX_TIMEOUT
+        )
     except asyncio.TimeoutError:
         proc.kill()
+        await proc.wait()
         raise RuntimeError("Codex CLI 시간 초과")
 
     # Codex가 직접 파일에 썼는지 확인
