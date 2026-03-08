@@ -32,6 +32,46 @@ Before reviewing any episode, you MUST read these files in the novel's folder:
 
 ---
 
+## 0.5 Mandatory Pre-Scan (Surface Defects First)
+
+> **서사 비평 전에 반드시 아래 표면 결함 스캔을 먼저 수행한다.** 이 단계를 건너뛰지 않는다.
+
+### 이물 언어 혼입 탐지
+
+한국어 원고에서 한글·숫자·기본 문장부호 외의 **외국어 토큰을 전수 스캔**한다.
+
+- **중국어** (한자가 아닌 간체/번체 문장): 还存在, 放了, 忘掉了, 什么事 등
+- **러시아어/키릴 문자**: сюда, это 등
+- **영어 단어**: something, anyway 등 (코드 블록·기술 용어 제외)
+- **일본어 히라가나/가타카나**: 혼입 여부
+
+> 짧은 단어 1개라도 발견하면 **[CRITICAL]**로 보고한다. 로컬 모델(Qwen 등) 원고에서 특히 빈번하다.
+
+### 번역투 / 비자연 한국어 탐지
+
+- **대명사 남용**: "그녀가", "그가" — 한국어 구어에서 부자연스러운 3인칭 대명사. 특히 가족/친족 지칭 시 호칭으로 대체해야 한다.
+- **동일 서술 구조 반복**: "~하다는 게 낯설었다" 같은 구조가 에피소드 내 2회 이상 반복
+- **영어식 화용**: "당신이 알다시피", "사실은" 같은 번역투 패턴
+
+### 설정/전문성 오류 탐지
+
+- **직업적 베테랑이 하지 않을 질문**: 수년 경력의 전문가가 기본 규칙을 모르는 듯한 발화
+- **세계관 핵심 규칙 위반**: CLAUDE.md의 금지사항과 충돌하는 캐릭터 행동이나 대사
+- **절차적 어색함**: 직업/업계 상식에 어긋나는 행동 순서
+
+### 반복 패턴 검출
+
+에피소드 전체에서 **동일 어휘·어미·문장 골격이 3회 이상** 나타나면 반드시 보고한다.
+
+- 보고 시 **두 가지 가능성을 분리 판정**한다:
+  - **의도적 반복 장치**: 특정 인물에 집중, 감정 국면에서 의미 변주, 삭제 시 리듬/주제 약화
+  - **모델 습관적 반복**: 여러 인물이 남발, 장면 무관하게 출현, 유사어로 대체해도 손실 없음
+- 예: "알아" 10회, "고개를 끄덕였다" 3회, 동일 마침 패턴 등
+
+> 판정이 어려우면 "의도적 반복 가능성이 있으나, 빈도가 과다하여 확인 필요"로 기록한다.
+
+---
+
 ## 1. Prose Quality (Core Focus)
 
 ### 1.1 Sentence-Level Craft
@@ -281,10 +321,11 @@ When invoked via `codex exec` in automated pipelines:
 1. **Context Load**: Read CLAUDE.md, settings/ (01, 03, 04), summaries/editor-feedback-log.md
 2. **Episode Read**: Read the target chapter file
 3. **Reference Check**: Read `EDITOR_FEEDBACK_gemini.md` if it exists (avoid redundancy, focus on uncovered issues)
-4. **Deep Analysis**:
+4. **Pre-Scan (Surface Defects)**: Foreign language contamination, translation artifacts, setting/expertise errors, repetition patterns (Section 0.5)
+5. **Deep Analysis**:
    - Prose scan: sentence rhythm, verb weight, sensory density, AI patterns
    - Dialogue scan: voice consistency, authenticity, talking heads
    - Emotion scan: arc shape, show vs tell ratio, psychological realism
-5. **Identify highest-yield issues**: Select 5-10 strong findings and 1-3 scene-level rewrite candidates
-6. **Write Feedback**: Output to `EDITOR_FEEDBACK_gpt.md` in the structured format above
-7. **Verify**: Confirm the feedback file was written successfully
+6. **Identify highest-yield issues**: Select 5-10 strong findings and 1-3 scene-level rewrite candidates
+7. **Write Feedback**: Output to `EDITOR_FEEDBACK_gpt.md` in the structured format above
+8. **Verify**: Confirm the feedback file was written successfully
