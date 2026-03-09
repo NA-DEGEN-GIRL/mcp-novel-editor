@@ -46,15 +46,20 @@ def parse_claude_md(novel_dir: str) -> dict:
     """CLAUDE.md에서 피드백 플래그와 모델명을 파싱한다."""
     content = safe_read(os.path.join(novel_dir, "CLAUDE.md"))
     flags = {
-        "nim_feedback": False,
-        "nim_feedback_model": "mistralai/mistral-large-3-675b-instruct-2512",
-        "ollama_feedback": False,
-        "ollama_feedback_model": "gpt-oss:120b",
+        "gemini_feedback": True,
         "gpt_feedback": True,
+        "nim_feedback": False,
+        "nim_feedback_model": "openai/gpt-oss-120b",
+        "ollama_feedback": False,
+        "ollama_feedback_model": "openai/gpt-oss-120b",
         "illustration": False,
     }
     for key in flags:
-        m = re.search(rf'\*\*{key}\*\*:\s*(true|false|"[^"]*")', content, re.IGNORECASE)
+        # 두 가지 형식 지원: "**key**: value" 또는 "| **key** | value |" (마크다운 테이블)
+        m = re.search(rf'\*\*{key}\*\*\s*\|?\s*[:]*\s*(true|false|"[^"]*"|[^\s|]+)', content, re.IGNORECASE)
+        if not m:
+            # 테이블 형식: | **key** | value |
+            m = re.search(rf'\|\s*\*\*{key}\*\*\s*\|\s*(true|false|"[^"]*"|[^\s|]+)', content, re.IGNORECASE)
         if m:
             val = m.group(1).strip('"')
             if val.lower() == "true":
@@ -66,65 +71,70 @@ def parse_claude_md(novel_dir: str) -> dict:
     return flags
 
 
-def build_prompt(novel_dir: str, episode_file: str, other_reviews: dict = None) -> str:
-    """NIM/Ollama용 리뷰 프롬프트를 구성한다 (설정 파일 임베딩)."""
+def build_prompt(episode_file: str) -> str:
+    """NIM/Ollama용 교정 프롬프트를 구성한다 (맞춤법/문법/어색한 표현만)."""
     episode = safe_read(episode_file)
     # EPISODE_META 제거
     episode = re.split(r"^---\s*\n### EPISODE_META", episode, flags=re.MULTILINE)[0].strip()
 
-    style = safe_read(os.path.join(novel_dir, "settings/01-style-guide.md"), 100)
-    chars = safe_read(os.path.join(novel_dir, "settings/03-characters.md"), 150)
-    world = safe_read(os.path.join(novel_dir, "settings/04-worldbuilding.md"), 80)
+    prompt = """아래 소설 에피소드의 **한글 교정 + 대사 맥락 검토**를 해줘.
 
-    prompt = "아래 소설 에피소드를 리뷰해. 결과는 EDITOR_FEEDBACK 형식으로 출력해.\n\n"
-    if style:
-        prompt += f"[설정 참고]\n문체 가이드:\n{style}\n\n"
-    if chars:
-        prompt += f"캐릭터:\n{chars}\n\n"
-    if world:
-        prompt += f"세계관:\n{world}\n\n"
+## 검토 범위
+1. **맞춤법 오류**: 띄어쓰기, 오탈자, 잘못된 조사 사용
+2. **어색한 표현**: 부자연스러운 접두어/접미어, 번역투, 어색한 어순
+3. **문법 오류**: 주술 호응, 시제 불일치, 조사 중복
+4. **대사 맥락 이상**: 에피소드 내에서 대사의 흐름이 앞뒤가 안 맞거나, 같은 캐릭터가 갑자기 어투가 바뀌거나, 대화 맥락이 이상한 경우
 
-    if other_reviews:
-        for source, content in other_reviews.items():
-            if content:
-                truncated = content[:3000] if len(content) > 3000 else content
-                prompt += f"[다른 AI 리뷰 참고 - {source}]\n{truncated}\n\n"
+## 검토하지 않는 것 (무시해)
+- 전체 스토리 아크, 세계관 설정, 복선 등 고차원 서사 리뷰
+- 문체 제안, 표현력 향상 등 주관적 의견
 
-    prompt += f"[리뷰 대상]\n{episode}"
+## 출력 형식
+오류가 있는 경우만 아래 형식으로 출력:
+
+| # | 유형 | 원문 | 수정 제안 |
+|---|------|------|----------|
+| 1 | 맞춤법 | "원문 발췌" | "수정안" |
+| 2 | 대사맥락 | "해당 대사" | "이상한 이유 설명" |
+
+오류가 없으면 "교정 사항 없음"이라고만 출력해.
+
+[검토 대상]
+"""
+    prompt += episode
     return prompt
 
 
-def get_system_prompt() -> str:
-    """GEMINI.md를 시스템 프롬프트로 읽는다. MCP 서버 번들 우선, fallback으로 NOVEL_ROOT."""
-    bundled = os.path.join(os.path.dirname(__file__), "GEMINI.md")
-    if os.path.isfile(bundled):
-        return safe_read(bundled)
-    return safe_read(os.path.join(NOVEL_ROOT, "GEMINI.md"))
-
-
 def save_feedback(novel_dir: str, source: str, content: str, episode_file: str, skip_if_exists: bool = False):
-    """EDITOR_FEEDBACK_{source}.md에 피드백을 저장한다."""
+    """EDITOR_FEEDBACK_{source}.md에 피드백을 저장한다. 메타데이터 헤더를 보장."""
     filename = f"EDITOR_FEEDBACK_{source}.md"
     filepath = os.path.join(novel_dir, filename)
-    if skip_if_exists and os.path.exists(filepath):
-        return filepath
     ep_name = os.path.basename(episode_file)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     header = f"<!-- source: {source} | file: {ep_name} | date: {timestamp} -->\n\n"
+
+    if skip_if_exists and os.path.exists(filepath):
+        # CLI가 직접 파일을 썼을 수 있음 — 메타데이터 헤더가 없으면 prepend
+        existing = Path(filepath).read_text(encoding="utf-8")
+        if not existing.startswith("<!-- source:"):
+            Path(filepath).write_text(header + existing, encoding="utf-8")
+        return filepath
+
     Path(filepath).write_text(header + content, encoding="utf-8")
     return filepath
 
 
 # ─── Source Callers ─────────────────────────────────────────
 
-async def call_nim(prompt: str, system: str, model: str) -> str:
-    """NIM Proxy를 통해 리뷰를 받는다 (SSE 스트리밍)."""
+async def call_nim(prompt: str, model: str) -> str:
+    """NIM Proxy를 통해 맞춤법/문법 교정을 받는다 (SSE 스트리밍)."""
     body = {
         "model": model,
-        "max_tokens": 8192,
-        "system": system,
+        "max_tokens": 16384,
+        "system": "당신은 한국어 맞춤법과 문법 교정 전문가입니다. 지적된 형식에 맞춰 간결하게 답변하세요.",
         "messages": [{"role": "user", "content": prompt}],
         "stream": True,
+        "temperature": 0.3,
     }
     headers = {"x-api-key": "dummy", "anthropic-version": "2023-06-01"}
 
@@ -151,15 +161,16 @@ async def call_nim(prompt: str, system: str, model: str) -> str:
     return full_text
 
 
-async def call_ollama(prompt: str, system: str, model: str) -> str:
-    """Ollama API로 리뷰를 받는다."""
+async def call_ollama(prompt: str, model: str) -> str:
+    """Ollama API로 맞춤법/문법 교정을 받는다."""
     body = {
         "model": model,
         "messages": [
-            {"role": "system", "content": system},
+            {"role": "system", "content": "당신은 한국어 맞춤법과 문법 교정 전문가입니다. 지적된 형식에 맞춰 간결하게 답변하세요."},
             {"role": "user", "content": prompt},
         ],
         "stream": False,
+        "options": {"num_predict": 4096, "temperature": 0.3},
     }
     async with httpx.AsyncClient(timeout=httpx.Timeout(OLLAMA_TIMEOUT, connect=10)) as client:
         resp = await client.post(f"{OLLAMA_URL}/api/chat", json=body)
@@ -168,21 +179,12 @@ async def call_ollama(prompt: str, system: str, model: str) -> str:
         return resp.json().get("message", {}).get("content", "")
 
 
-async def call_gemini(novel_dir: str, episode_file: str, other_reviews: dict = None) -> str:
+async def call_gemini(novel_dir: str, episode_file: str) -> str:
     """Gemini CLI로 리뷰를 받는다 (파일시스템 접근)."""
     ep_path = episode_file
     gemini_md = os.path.join(os.path.dirname(__file__), "GEMINI.md")
     today = datetime.now().strftime("%Y-%m-%d %H:%M")
     prompt = f"오늘 날짜는 {today}이다. {gemini_md}에 따라 {ep_path}를 리뷰해. 설정 파일(settings/), 요약(summaries/), 이전 피드백 로그(summaries/editor-feedback-log.md)를 참고해서 EDITOR_FEEDBACK_gemini.md에 결과를 작성해."
-
-    if other_reviews:
-        refs = []
-        for source, content in other_reviews.items():
-            if content:
-                truncated = content[:2000] if len(content) > 2000 else content
-                refs.append(f"[{source} 리뷰]\n{truncated}")
-        if refs:
-            prompt += f"\n\n추가 참고 자료: 아래 다른 AI 모델의 리뷰 결과도 참고하되, 맹신하지 말고 네 독자적 판단으로 리뷰해.\n" + "\n".join(refs)
 
     proc = await asyncio.create_subprocess_exec(
         "gemini", "-m", "gemini-3.1-pro-preview", "-p", "-", "-y",
@@ -213,21 +215,12 @@ async def call_gemini(novel_dir: str, episode_file: str, other_reviews: dict = N
     raise RuntimeError(f"Gemini 리뷰 실패: {stderr.decode('utf-8', errors='replace')[:300]}")
 
 
-async def call_codex(novel_dir: str, episode_file: str, other_reviews: dict = None) -> str:
+async def call_codex(novel_dir: str, episode_file: str) -> str:
     """Codex CLI (GPT)로 리뷰를 받는다 (파일시스템 접근)."""
     ep_path = episode_file
     gpt_md = os.path.join(os.path.dirname(__file__), "GPT.md")
     today = datetime.now().strftime("%Y-%m-%d %H:%M")
     prompt = f"오늘 날짜는 {today}이다. {gpt_md}에 따라 {ep_path}를 리뷰해. 설정 파일(settings/), 요약(summaries/), 이전 피드백 로그(summaries/editor-feedback-log.md)를 참고해서 EDITOR_FEEDBACK_gpt.md에 결과를 작성해."
-
-    if other_reviews:
-        refs = []
-        for source, content in other_reviews.items():
-            if content:
-                truncated = content[:2000] if len(content) > 2000 else content
-                refs.append(f"[{source} 리뷰]\n{truncated}")
-        if refs:
-            prompt += f"\n\n추가 참고 자료: 아래 다른 AI 모델의 리뷰 결과도 참고하되, 맹신하지 말고 네 독자적 판단으로 리뷰해.\n" + "\n".join(refs)
 
     proc = await asyncio.create_subprocess_exec(
         "codex", "exec", "-", "--full-auto", "-m", "gpt-5.4", "-C", novel_dir,
@@ -281,66 +274,55 @@ async def review_episode(
         return f"❌ 소설 폴더가 없습니다: {novel_dir}"
 
     flags = parse_claude_md(novel_dir)
-    system = get_system_prompt()
     ep_name = os.path.basename(episode_file)
 
     # 활성 소스 결정
     if sources == "auto":
         active = set()
+        if flags["gemini_feedback"]:
+            active.add("gemini")
+        if flags["gpt_feedback"]:
+            active.add("gpt")
         if flags["nim_feedback"]:
             active.add("nim")
         if flags["ollama_feedback"]:
             active.add("ollama")
-        active.add("gemini")
-        if flags["gpt_feedback"]:
-            active.add("gpt")
     elif sources == "all":
         active = {"nim", "ollama", "gemini", "gpt"}
     else:
         active = {s.strip() for s in sources.split(",")}
 
+    if not active:
+        return f"## 편집 리뷰 건너뜀: {ep_name}\n\n모든 피드백 소스가 비활성화되어 있습니다. CLAUDE.md의 플래그를 확인하세요."
+
     results = {}
     errors = {}
 
-    # Phase 1: NIM + Ollama 병렬
-    nim_ollama_tasks = []
+    # 모든 소스를 독립 병렬로 실행
+    all_tasks = []
     if "nim" in active or "ollama" in active:
-        prompt = build_prompt(novel_dir, episode_file)
+        prompt = build_prompt(episode_file)
     if "nim" in active:
-        nim_ollama_tasks.append(("nim", call_nim(prompt, system, flags["nim_feedback_model"])))
+        all_tasks.append(("nim", call_nim(prompt, flags["nim_feedback_model"])))
     if "ollama" in active:
-        nim_ollama_tasks.append(("ollama", call_ollama(prompt, system, flags["ollama_feedback_model"])))
-
-    if nim_ollama_tasks:
-        gathered = await asyncio.gather(
-            *[task for _, task in nim_ollama_tasks],
-            return_exceptions=True,
-        )
-        for (source_name, _), result in zip(nim_ollama_tasks, gathered):
-            if isinstance(result, Exception):
-                errors[source_name] = str(result)
-            else:
-                results[source_name] = result
-                save_feedback(novel_dir, source_name, result, episode_file)
-
-    # Phase 2: Gemini + Codex 병렬 (NIM/Ollama 결과를 참고)
-    phase2_tasks = []
+        all_tasks.append(("ollama", call_ollama(prompt, flags["ollama_feedback_model"])))
     if "gemini" in active:
-        phase2_tasks.append(("gemini", call_gemini(novel_dir, episode_file, results)))
+        all_tasks.append(("gemini", call_gemini(novel_dir, episode_file)))
     if "gpt" in active:
-        phase2_tasks.append(("gpt", call_codex(novel_dir, episode_file, results)))
+        all_tasks.append(("gpt", call_codex(novel_dir, episode_file)))
 
-    if phase2_tasks:
+    if all_tasks:
         gathered = await asyncio.gather(
-            *[task for _, task in phase2_tasks],
+            *[task for _, task in all_tasks],
             return_exceptions=True,
         )
-        for (source_name, _), result in zip(phase2_tasks, gathered):
+        for (source_name, _), result in zip(all_tasks, gathered):
             if isinstance(result, Exception):
                 errors[source_name] = str(result)
             else:
                 results[source_name] = result
-                save_feedback(novel_dir, source_name, result, episode_file, skip_if_exists=True)
+                save_feedback(novel_dir, source_name, result, episode_file,
+                              skip_if_exists=(source_name in ("gemini", "gpt")))
 
     # 결과 요약
     lines = [f"## 편집 리뷰 결과: {ep_name}\n"]
