@@ -269,6 +269,51 @@ async def call_codex(novel_dir: str, episode_file: str) -> str:
     raise RuntimeError(f"Codex 리뷰 실패: {stderr.decode('utf-8', errors='replace')[:300]}")
 
 
+async def call_codex_naturalness(novel_dir: str, episode_file: str) -> str:
+    """GPT로 결합 자연성만 전문 검사한다."""
+    ep_path = episode_file
+    prompt = f"""아래 한국어 소설 에피소드를 읽고, **결합 자연성**만 검사해줘.
+
+점검 대상: 명사-동사, 명사-형용사, 부사-동사, 감정-신체, 감각-동작, 추상명사-서술어 결합.
+
+핵심 기준: 문법적으로 가능하더라도, 한국어 화자가 같은 의미에서 보통 택하지 않는 결합이면 지적.
+
+판정 질문:
+1. 이 표현을 한국어 화자가 자연스럽게 쓸 가능성이 높은가?
+2. 같은 뜻에서 더 관용적인 결합이 따로 있는가?
+3. 어색함이 결합 방식 자체에서 오는가?
+
+예외: 시적 비유, 장르적 낯설게 쓰기, 캐릭터 고유 어법은 허용.
+
+출력: 마크다운 테이블로. 결함 없으면 "결함 없음".
+
+| # | 위치(줄) | 원문 | 왜 어색한가 | 자연한 대안 |
+|---|---------|------|-----------|-----------|
+
+파일: {ep_path}"""
+
+    proc = await asyncio.create_subprocess_exec(
+        "codex", "exec", "-", "--full-auto", "-m", "gpt-5.4", "-C", novel_dir,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(prompt.encode()), timeout=CODEX_TIMEOUT
+        )
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise RuntimeError("GPT 결합 자연성 검사 시간 초과")
+
+    output = stdout.decode("utf-8", errors="replace").strip()
+    if output:
+        return output
+
+    raise RuntimeError(f"GPT 결합 자연성 검사 실패: {stderr.decode('utf-8', errors='replace')[:300]}")
+
+
 # ─── MCP Tools ──────────────────────────────────────────────
 
 @mcp.tool()
@@ -329,6 +374,8 @@ async def review_episode(
         all_tasks.append(("gemini", call_gemini(novel_dir, episode_file)))
     if "gpt" in active:
         all_tasks.append(("gpt", call_codex(novel_dir, episode_file)))
+    if "gpt_naturalness" in active:
+        all_tasks.append(("gpt_naturalness", call_codex_naturalness(novel_dir, episode_file)))
 
     if all_tasks:
         gathered = await asyncio.gather(
@@ -345,7 +392,7 @@ async def review_episode(
 
     # 결과 요약
     lines = [f"## 편집 리뷰 결과: {ep_name}\n"]
-    for src in ["nim", "ollama", "gemini", "gpt"]:
+    for src in ["nim", "ollama", "gemini", "gpt", "gpt_naturalness"]:
         if src in results:
             preview = results[src][:500].replace("\n", " ")
             path = os.path.join(novel_dir, f"EDITOR_FEEDBACK_{src.split('_')[0]}.md")
