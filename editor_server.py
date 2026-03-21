@@ -276,14 +276,16 @@ async def call_codex_naturalness(novel_dir: str, episode_file: str) -> str:
     prompt = f"{ep_path}를 읽고 한국어 결합 자연성만 검사하라. 문법은 맞지만 한국어 화자가 같은 의미에서 보통 다른 결합을 택하는 표현을 최대한 빠짐없이 후보로 잡은 뒤, 명백한 문학적 허용만 제외해 최종 결과를 EDITOR_FEEDBACK_gpt_naturalness.md에 표로 써라. 표: 번호, 줄, 원문, 왜 어색한가, 자연한 대안. 없으면 결함 없음."
 
     proc = await asyncio.create_subprocess_exec(
-        "codex", "exec", "-", "--full-auto", "-m", "gpt-5.4", "-C", novel_dir,
+        "codex", "exec", "-", "--full-auto", "-m", "gpt-5.4",
+        "-c", "model_reasoning_effort=\"high\"",
+        "-C", novel_dir,
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
     try:
         stdout, stderr = await asyncio.wait_for(
-            proc.communicate(prompt.encode()), timeout=CODEX_TIMEOUT
+            proc.communicate(prompt.encode()), timeout=CODEX_TIMEOUT * 2  # high effort는 더 오래 걸림
         )
     except asyncio.TimeoutError:
         proc.kill()
