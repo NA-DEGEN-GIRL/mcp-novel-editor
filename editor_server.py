@@ -273,7 +273,7 @@ async def call_codex_naturalness(novel_dir: str, episode_file: str) -> str:
     """GPT로 결합 자연성만 전문 검사한다. call_codex와 동일 패턴(파일 출력)."""
     ep_path = episode_file
     today = datetime.now().strftime("%Y-%m-%d %H:%M")
-    prompt = f"오늘 날짜는 {today}이다. {ep_path}를 읽고 한국어 결합 자연성을 검사해서 EDITOR_FEEDBACK_gpt_naturalness.md에 결과를 작성해. 한국어 원어민 감각으로 모든 문장을 읽고, 문법은 맞지만 한국어 화자가 같은 의미에서 보통 다른 결합을 택하는 표현을 찾아라. 명사-동사, 부사-동사, 감정-신체, 추상명사-서술어 결합을 점검한다. 시적 비유나 장르적 표현은 허용. 진짜 어색한 것만 지적하고 문학적 허용은 보호해라. 테이블 형식으로 출력: 번호, 위치(줄), 원문, 왜 어색한가, 자연한 대안. 결함 없으면 결함 없음."
+    prompt = f"{ep_path}를 읽고 한국어 결합 자연성만 검사하라. 문법은 맞지만 한국어 화자가 같은 의미에서 보통 다른 결합을 택하는 표현을 최대한 빠짐없이 후보로 잡은 뒤, 명백한 문학적 허용만 제외해 최종 결과를 EDITOR_FEEDBACK_gpt_naturalness.md에 표로 써라. 표: 번호, 줄, 원문, 왜 어색한가, 자연한 대안. 없으면 결함 없음."
 
     proc = await asyncio.create_subprocess_exec(
         "codex", "exec", "-", "--full-auto", "-m", "gpt-5.4", "-C", novel_dir,
