@@ -38,18 +38,7 @@ Before reviewing any episode, you MUST read these files in the novel's folder:
   - 시(時), 살 → **고유어 수사**: 세 시, 스무 살 (NOT 삼 시, 이십 살)
 - **[IMPORTANT] 할푼리(割分厘) Unit Completeness**: When expressing ratios with 할/푼/리, each sub-unit digit MUST have its unit name. "오 할 이" is WRONG — must be "오 할 이 푼". "오 할" alone is fine (integer 할 only). Flag any "X 할 Y" where Y lacks a unit suffix (푼 or 리).
 
-### 1.2 결합 자연성 (Collocational Naturalness)
-
-- **점검 대상**: 명사-동사, 명사-형용사, 부사-동사, 감정-신체, 감각-동작, 추상명사-서술어 결합을 우선 점검한다.
-- **핵심 기준**: 문법적으로 가능하더라도, 한국어 화자가 같은 의미에서 보통 택하지 않는 결합이면 지적한다. "이해는 되지만 실제로는 잘 안 쓰는가?"를 본다.
-- **판정 질문**:
-  1. 이 표현을 한국어 화자가 자연스럽게 말하거나 서술할 가능성이 높은가?
-  2. 같은 뜻에서 더 관용적이고 즉각적으로 읽히는 결합이 따로 있는가?
-  3. 어색함이 개별 단어 뜻 때문이 아니라 결합 방식 자체에서 오는가?
-- **예외**: 시적 비유, 장르적 낯설게 쓰기, 캐릭터 고유 어법은 허용. 다만 낯선 결합이 연속되거나 해석 비용이 커지면 지적.
-- **보고 방식**: 지적 시 (1) 문제 표현 (2) 왜 어색한지 (3) 더 자연한 대안 1~2개를 함께 제시.
-
-### 1.3 AI Habit Detection
+### 1.2 AI Habit Detection
 
 Flag patterns that make prose feel AI-generated. Check against `settings/01-style-guide.md` for novel-specific forbidden expressions.
 
@@ -71,7 +60,7 @@ Common AI habits to flag:
 
 > **Note**: Detailed grammar/spelling correction is handled by a separate `korean-proofreader` agent. Focus on **artistry and nuance**, not mechanical grammar.
 
-### 1.4 Repetition Pattern Detection
+### 1.3 Repetition Pattern Detection
 
 에피소드 전체에서 동일 어휘·응답어·문장 골격이 **눈에 띄게 반복**되면 보고한다. 횟수보다 **의도의 유무**가 기준이다.
 
@@ -82,7 +71,7 @@ Common AI habits to flag:
   - 모델 습관: 여러 인물이 남발, 장면 무관, 유사어 대체 가능
 - 판정이 어려우면 "의도적 반복 가능성이 있으나, 빈도가 과다하여 확인 필요"로 기록
 
-### 1.5 Narrative Density Check (Supplementary)
+### 1.4 Narrative Density Check (Supplementary)
 
 > GPT의 주요 영역이지만, 아래 항목이 눈에 띄면 간략히 지적한다.
 
