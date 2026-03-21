@@ -270,27 +270,22 @@ async def call_codex(novel_dir: str, episode_file: str) -> str:
 
 
 async def call_codex_naturalness(novel_dir: str, episode_file: str) -> str:
-    """GPT로 결합 자연성만 전문 검사한다."""
+    """GPT로 결합 자연성만 전문 검사한다. call_codex와 동일 패턴(파일 출력)."""
     ep_path = episode_file
-    prompt = f"""아래 한국어 소설 에피소드를 읽고, **결합 자연성**만 검사해줘.
+    today = datetime.now().strftime("%Y-%m-%d %H:%M")
+    prompt = f"""오늘 날짜는 {today}이다. {ep_path}를 읽고 **결합 자연성**만 검사해서 EDITOR_FEEDBACK_gpt_naturalness.md에 결과를 작성해.
 
 점검 대상: 명사-동사, 명사-형용사, 부사-동사, 감정-신체, 감각-동작, 추상명사-서술어 결합.
-
-핵심 기준: 문법적으로 가능하더라도, 한국어 화자가 같은 의미에서 보통 택하지 않는 결합이면 지적.
-
-판정 질문:
-1. 이 표현을 한국어 화자가 자연스럽게 쓸 가능성이 높은가?
-2. 같은 뜻에서 더 관용적인 결합이 따로 있는가?
-3. 어색함이 결합 방식 자체에서 오는가?
-
+핵심 기준: 문법적으로 가능하더라도, 한국어 화자가 같은 의미에서 보통 택하지 않는 결합이면 지적. "이해는 되지만 실제로는 잘 안 쓰는가?"를 본다.
 예외: 시적 비유, 장르적 낯설게 쓰기, 캐릭터 고유 어법은 허용.
 
-출력: 마크다운 테이블로. 결함 없으면 "결함 없음".
+출력 형식 (EDITOR_FEEDBACK_gpt_naturalness.md에 작성):
+# 결합 자연성 검사 — {{N}}화
 
 | # | 위치(줄) | 원문 | 왜 어색한가 | 자연한 대안 |
 |---|---------|------|-----------|-----------|
 
-파일: {ep_path}"""
+결함 없으면 "결함 없음"."""
 
     proc = await asyncio.create_subprocess_exec(
         "codex", "exec", "-", "--full-auto", "-m", "gpt-5.4", "-C", novel_dir,
@@ -306,6 +301,11 @@ async def call_codex_naturalness(novel_dir: str, episode_file: str) -> str:
         proc.kill()
         await proc.wait()
         raise RuntimeError("GPT 결합 자연성 검사 시간 초과")
+
+    # Codex가 직접 파일에 썼는지 확인
+    feedback_path = os.path.join(novel_dir, "EDITOR_FEEDBACK_gpt_naturalness.md")
+    if os.path.exists(feedback_path):
+        return safe_read(feedback_path)
 
     output = stdout.decode("utf-8", errors="replace").strip()
     if output:
