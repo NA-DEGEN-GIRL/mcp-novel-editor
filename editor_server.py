@@ -17,6 +17,8 @@ from pathlib import Path
 import httpx
 from mcp.server.fastmcp import FastMCP
 
+from compile_brief import register_compile_brief
+
 mcp = FastMCP("novel-editor")
 
 NOVEL_ROOT = os.getenv("NOVEL_ROOT", "/root/novel")
@@ -106,7 +108,10 @@ def build_prompt(episode_file: str) -> str:
 
 
 def save_feedback(novel_dir: str, source: str, content: str, episode_file: str, skip_if_exists: bool = False):
-    """EDITOR_FEEDBACK_{source}.md에 피드백을 저장한다. 메타데이터 헤더를 보장."""
+    """EDITOR_FEEDBACK_{source}.md에 피드백을 저장한다. 메타데이터 헤더를 보장.
+
+    기존 피드백이 있으면 archive/ 폴더로 이동하여 유실을 방지한다.
+    """
     filename = f"EDITOR_FEEDBACK_{source}.md"
     filepath = os.path.join(novel_dir, filename)
     ep_name = os.path.basename(episode_file)
@@ -119,6 +124,20 @@ def save_feedback(novel_dir: str, source: str, content: str, episode_file: str, 
         if not existing.startswith("<!-- source:"):
             Path(filepath).write_text(header + existing, encoding="utf-8")
         return filepath
+
+    # 기존 피드백이 있으면 archive로 이동 (유실 방지)
+    if os.path.exists(filepath):
+        archive_dir = os.path.join(novel_dir, "feedback-archive")
+        os.makedirs(archive_dir, exist_ok=True)
+        existing = Path(filepath).read_text(encoding="utf-8")
+        # 기존 파일에서 에피소드명 추출
+        import re
+        old_ep_match = re.search(r"file: ([^|]+)", existing)
+        old_ep = old_ep_match.group(1).strip() if old_ep_match else "unknown"
+        old_ep_stem = old_ep.replace(".md", "")
+        archive_name = f"EDITOR_FEEDBACK_{source}_{old_ep_stem}.md"
+        archive_path = os.path.join(archive_dir, archive_name)
+        Path(archive_path).write_text(existing, encoding="utf-8")
 
     Path(filepath).write_text(header + content, encoding="utf-8")
     return filepath
@@ -439,6 +458,8 @@ async def check_status() -> str:
     header = "| 서비스 | 상태 | 상세 |\n|--------|------|------|\n"
     return header + "\n".join(rows)
 
+
+register_compile_brief(mcp)
 
 if __name__ == "__main__":
     mcp.run()
