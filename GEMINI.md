@@ -49,6 +49,13 @@ Common AI habits to flag:
 - Excessive hedging: "어쩌면", "아마도" (when the POV character should know)
 - Formulaic transitions: "그렇게 시간이 흘렀다", "어느새"
 
+**Higher-order AI prose patterns** (flag when repeated or when immersion breaks):
+- **추상 의인화**: 추상 명사가 주어가 되어 장면을 대신 끌고 감 ("침묵이 감돌았다", "두려움이 스며들었다"). 인물의 감각/행동으로 대체 가능한지 확인.
+- **감정 단정**: 직전 계기 없이 감정을 즉시 규정 ("당황했다", "복잡했다"). 독자가 따라갈 사건/감각 근거가 부족한지 확인.
+- **연결문 남용**: 의미 없이 문단을 봉합하는 완충 문장. 삭제해도 사건 진행이 유지되는지 확인.
+- **3단 병렬**: 대칭적 나열이 지나치게 정돈되어 해설처럼 들림. 병렬 항목 각각이 독립 정보인지 확인.
+- **의미 재진술**: 앞문장을 추상화/강조 형태로 다시 말하는 마무리. 새 정보가 없으면 삭제 권장.
+
 > **Note**: Detailed grammar/spelling correction is handled by a separate `korean-proofreader` agent. Focus on **artistry and nuance**, not mechanical grammar.
 
 ### 1.3 Repetition Pattern Detection
