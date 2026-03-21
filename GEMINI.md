@@ -50,17 +50,19 @@ Common AI habits to flag:
 - Formulaic transitions: "그렇게 시간이 흘렀다", "어느새"
 
 **Higher-order AI prose patterns** (flag when repeated or when immersion breaks):
-- **추상 의인화**: 추상 명사가 주어가 되어 장면을 대신 끌고 감 ("침묵이 감돌았다", "두려움이 스며들었다"). 인물의 감각/행동으로 대체 가능한지 확인.
-- **감정 단정**: 직전 계기 없이 감정을 즉시 규정 ("당황했다", "복잡했다"). 독자가 따라갈 사건/감각 근거가 부족한지 확인.
+- **추상 의인화**: 추상 명사가 주어가 되어 장면을 대신 끌고 감. 습관적 반복이면 지적. **단, §0 Voice Profile과 representative prose에 어울리는 서정적/우화적/고전적 표현이라면 지적하지 않는다.**
+- **감정 단정**: 직전 계기 없이 감정을 즉시 규정. 독자가 따라갈 사건/감각 근거가 부족한지 확인. 단발은 허용.
 - **연결문 남용**: 의미 없이 문단을 봉합하는 완충 문장. 삭제해도 사건 진행이 유지되는지 확인.
-- **3단 병렬**: 대칭적 나열이 지나치게 정돈되어 해설처럼 들림. 병렬 항목 각각이 독립 정보인지 확인.
+- **3단 병렬**: 대칭적 나열이 해설처럼 들림. 병렬 항목 각각이 독립 정보인지 확인.
 - **의미 재진술**: 앞문장을 추상화/강조 형태로 다시 말하는 마무리. 새 정보가 없으면 삭제 권장.
+
+> **모든 지적 전에 §0 Voice Profile 및 대표 문단(representative prose)과 대조한다.** 이 소설의 의도적 스타일이면 지적하지 않는다.
 
 > **Note**: Detailed grammar/spelling correction is handled by a separate `korean-proofreader` agent. Focus on **artistry and nuance**, not mechanical grammar.
 
 ### 1.3 Repetition Pattern Detection
 
-에피소드 전체에서 **동일 어휘·응답어·문장 골격이 3회 이상** 나타나면 반드시 보고한다.
+에피소드 전체에서 동일 어휘·응답어·문장 골격이 **눈에 띄게 반복**되면 보고한다. 횟수보다 **의도의 유무**가 기준이다.
 
 - **단어/응답어 반복**: "알아", "고개를 끄덕였다", "화면을 바라보았다" 등이 과도하게 반복되는 경우
 - **서술 구조 반복**: "~한다는 게 낯설었다", "나는 ~에서 손을 뗐다" 등 동일 골격이 반복되는 경우
@@ -211,7 +213,7 @@ Write your review to `EDITOR_FEEDBACK_gemini.md` in the novel's folder. Use the 
 ## 6. General Principles
 
 1. **Artistry over Grammar**: Aim for professional literary quality. A grammatically correct but flat sentence is worse than a slightly unconventional but vivid one.
-2. **Immersion Protection**: The reader should never feel like they are reading AI-generated text. This is the single most important goal.
+2. **Immersion Protection**: The reader should never feel like they are reading AI-generated text. 단, "AI스럽다"의 기준은 일반적 좋은 문장이 아니라 **이 소설의 §0 Voice Profile과 대표 문단**이다. Voice에 맞는 표현은 일반 기준에서 어색하더라도 보호한다.
 3. **Precision**: Point out specific line numbers and provide 2-3 stylistic alternatives for every suggestion.
 4. **Respect the Constitution**: CLAUDE.md is the supreme authority. Never suggest changes that violate its rules, core promises, or forbidden patterns.
 5. **Don't Rewrite the Author**: Suggest improvements, don't impose your style. The novel has its own voice defined in `settings/01-style-guide.md`.
