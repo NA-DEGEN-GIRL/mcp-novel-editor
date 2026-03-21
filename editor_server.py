@@ -388,17 +388,21 @@ async def review_episode(
             else:
                 results[source_name] = result
                 save_feedback(novel_dir, source_name, result, episode_file,
-                              skip_if_exists=(source_name in ("gemini", "gpt")))
+                              skip_if_exists=(source_name in ("gemini", "gpt", "gpt_naturalness")))
 
     # 결과 요약
     lines = [f"## 편집 리뷰 결과: {ep_name}\n"]
     for src in ["nim", "ollama", "gemini", "gpt", "gpt_naturalness"]:
+        if src not in active:
+            continue
         if src in results:
             preview = results[src][:500].replace("\n", " ")
-            path = os.path.join(novel_dir, f"EDITOR_FEEDBACK_{src.split('_')[0]}.md")
+            path = os.path.join(novel_dir, f"EDITOR_FEEDBACK_{src}.md")
             lines.append(f"### ✅ {src.upper()}\n- 저장: `{path}`\n- 미리보기: {preview}...\n")
         elif src in errors:
             lines.append(f"### ❌ {src.upper()}\n- 오류: {errors[src]}\n")
+        else:
+            lines.append(f"### ⚠️ {src.upper()}\n- 결과 없음 (실행되지 않았거나 빈 응답)\n")
 
     return "\n".join(lines)
 
